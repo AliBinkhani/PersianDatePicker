@@ -56,6 +56,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PlainTooltip
@@ -104,6 +105,7 @@ import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
@@ -131,7 +133,8 @@ import kotlinx.coroutines.launch
 fun DatePicker(
     state: DatePickerState,
     modifier: Modifier = Modifier,
-    dateFormatter: DatePickerFormatter = remember { DatePickerDefaults.dateFormatter() },
+    dateFormatter: DatePickerFormatter =
+        remember(state.calendarType) { DatePickerDefaults.dateFormatter(calendarType = state.calendarType) },
     colors: DatePickerColors = DatePickerDefaults.colors(),
     title: (@Composable () -> Unit)? = {
         DatePickerDefaults.DatePickerTitle(
@@ -144,6 +147,7 @@ fun DatePicker(
             selectedDateMillis = state.selectedDateMillis,
             dateFormatter = dateFormatter,
             locale = state.locale,
+            calendarType = state.calendarType,
             modifier = Modifier.padding(DatePickerHeadlinePadding),
             contentColor = colors.headlineContentColor,
         )
@@ -301,6 +305,11 @@ value class DisplayMode internal constructor(internal val value: Int) {
  *   current one.
  * @param calendarType the [CalendarType] (Gregorian or Persian/Jalali) this picker's dates are
  *   expressed in
+ * @param locale the [CalendarLocale] that will be used when formatting dates, determining the
+ *   week-days, the first day of the week, and more. Defaults to the platform's current locale.
+ *   Note that this only controls locale-driven details (language, digits, first day of week) —
+ *   the calendar system itself is controlled independently by [calendarType], regardless of what
+ *   language/region [locale] carries.
  * @param yearRange an [IntRange] that holds the year range that the date picker will be limited
  *   to
  * @param initialDisplayMode an initial [DisplayMode] that this state will hold
@@ -312,6 +321,7 @@ fun rememberDatePickerState(
     initialSelectedDateMillis: Long? = null,
     initialDisplayedMonthMillis: Long? = initialSelectedDateMillis,
     calendarType: CalendarType = CalendarType.PERSIAN,
+    locale: CalendarLocale = defaultLocale(),
     yearRange: IntRange =
         if (calendarType == CalendarType.PERSIAN) {
             DatePickerDefaults.PersianYearRange
@@ -321,7 +331,6 @@ fun rememberDatePickerState(
     initialDisplayMode: DisplayMode = DisplayMode.Picker,
     selectableDates: SelectableDates = DatePickerDefaults.AllDates,
 ): DatePickerState {
-    val locale = defaultLocale()
     return rememberSaveable(saver = DatePickerStateImpl.Saver(selectableDates, locale, calendarType)) {
             DatePickerStateImpl(
                 initialSelectedDateMillis = initialSelectedDateMillis,
@@ -492,17 +501,33 @@ object DatePickerDefaults {
      * @param selectedDateDescriptionSkeleton a date format skeleton used to format a selected
      *   date to be used as content description for screen readers (e.g. "Saturday, March 27,
      *   2021")
+     * @param calendarType only affects [CalendarType.PERSIAN]: ICU's skeleton-to-pattern
+     *   derivation for the Persian calendar can reorder fields unpredictably and inject a stray
+     *   era marker ("AP"), so for [CalendarType.PERSIAN] this formatter uses fixed
+     *   day-month-year patterns instead of the skeletons above (which only apply to
+     *   [CalendarType.GREGORIAN]).
      */
     fun dateFormatter(
         yearSelectionSkeleton: String = YearMonthSkeleton,
         selectedDateSkeleton: String = YearAbbrMonthDaySkeleton,
         selectedDateDescriptionSkeleton: String = YearMonthWeekdayDaySkeleton,
+        calendarType: CalendarType = CalendarType.PERSIAN,
     ): DatePickerFormatter =
-        DatePickerFormatterImpl(
-            yearSelectionSkeleton = yearSelectionSkeleton,
-            selectedDateSkeleton = selectedDateSkeleton,
-            selectedDateDescriptionSkeleton = selectedDateDescriptionSkeleton,
-        )
+        if (calendarType == CalendarType.PERSIAN) {
+            DatePickerFormatterImpl(
+                yearSelectionFormat = PersianMonthYearPattern,
+                selectedDateFormat = PersianDatePattern,
+                selectedDateDescriptionFormat = PersianDateDescriptionPattern,
+                usePattern = true,
+            )
+        } else {
+            DatePickerFormatterImpl(
+                yearSelectionFormat = yearSelectionSkeleton,
+                selectedDateFormat = selectedDateSkeleton,
+                selectedDateDescriptionFormat = selectedDateDescriptionSkeleton,
+                usePattern = false,
+            )
+        }
 
     /**
      * A default date picker title composable.
@@ -528,6 +553,13 @@ object DatePickerDefaults {
      *   platform locale, but callers that know their picker's actual calendar-aware locale (e.g.
      *   [DatePicker] itself, via `state.locale`) should pass it explicitly so the headline text
      *   uses the same calendar system (Gregorian/Persian) as the calendar grid.
+     * @param calendarType only affects [CalendarType.PERSIAN]: the formatted headline (e.g. "۲۶
+     *   مرداد ۱۴۰۵") starts with a digit run, which — when displayed inside an LTR-ambient layout
+     *   (e.g. the app's UI language is English while the date itself is Persian) — can trip up
+     *   automatic bidi paragraph-direction detection and visibly scramble the field order. Forcing
+     *   an explicit RTL text direction for [CalendarType.PERSIAN] avoids that. Persian dates are
+     *   always rendered RTL; this does not attempt to also look natural when the surrounding UI
+     *   language is LTR (e.g. Persian-calendar dates formatted with an English locale).
      */
     @Composable
     fun DatePickerHeadline(
@@ -536,6 +568,7 @@ object DatePickerDefaults {
         modifier: Modifier = Modifier,
         contentColor: Color = colors().headlineContentColor,
         locale: CalendarLocale = defaultLocale(),
+        calendarType: CalendarType = CalendarType.GREGORIAN,
     ) {
         val formattedDate =
             dateFormatter.formatDate(dateMillis = selectedDateMillis, locale = locale)
@@ -563,6 +596,12 @@ object DatePickerDefaults {
                 },
             color = contentColor,
             maxLines = 1,
+            style =
+                if (calendarType == CalendarType.PERSIAN) {
+                    LocalTextStyle.current.copy(textDirection = TextDirection.Rtl)
+                } else {
+                    LocalTextStyle.current
+                },
         )
     }
 
@@ -623,6 +662,18 @@ object DatePickerDefaults {
      * screen readers (e.g. "Saturday, March 27, 2021")
      */
     const val YearMonthWeekdayDaySkeleton: String = "yMMMMEEEEd"
+
+    /** A day-month-year pattern used for [CalendarType.PERSIAN] (e.g. "۲۶ مرداد ۱۴۰۵"). */
+    internal const val PersianDatePattern: String = "d MMMM y"
+
+    /** A month-year pattern used for [CalendarType.PERSIAN] (e.g. "مرداد ۱۴۰۵"). */
+    internal const val PersianMonthYearPattern: String = "MMMM y"
+
+    /**
+     * A weekday-day-month-year pattern used for [CalendarType.PERSIAN] content descriptions (e.g.
+     * "دوشنبه ۲۶ مرداد ۱۴۰۵").
+     */
+    internal const val PersianDateDescriptionPattern: String = "EEEE d MMMM y"
 }
 
 private fun formatHeadlineDescription(template: String, verboseDateDescription: String): String =
@@ -1016,9 +1067,10 @@ private class DatePickerStateImpl(
  */
 @Immutable
 private class DatePickerFormatterImpl(
-    val yearSelectionSkeleton: String,
-    val selectedDateSkeleton: String,
-    val selectedDateDescriptionSkeleton: String,
+    val yearSelectionFormat: String,
+    val selectedDateFormat: String,
+    val selectedDateDescriptionFormat: String,
+    val usePattern: Boolean,
 ) : DatePickerFormatter {
 
     // A map for caching formatter related results for better performance
@@ -1026,35 +1078,39 @@ private class DatePickerFormatterImpl(
 
     override fun formatMonthYear(monthMillis: Long?, locale: CalendarLocale): String? {
         if (monthMillis == null) return null
-        return formatWithSkeleton(monthMillis, yearSelectionSkeleton, locale, formatterCache)
+        return format(monthMillis, yearSelectionFormat, locale)
     }
 
     override fun formatDate(dateMillis: Long?, locale: CalendarLocale, forContentDescription: Boolean): String? {
         if (dateMillis == null) return null
-        return formatWithSkeleton(
+        return format(
             dateMillis,
-            if (forContentDescription) {
-                selectedDateDescriptionSkeleton
-            } else {
-                selectedDateSkeleton
-            },
+            if (forContentDescription) selectedDateDescriptionFormat else selectedDateFormat,
             locale,
-            formatterCache,
         )
     }
 
+    private fun format(utcTimeMillis: Long, formatSpec: String, locale: CalendarLocale): String =
+        if (usePattern) {
+            formatWithPattern(utcTimeMillis, formatSpec, locale, formatterCache)
+        } else {
+            formatWithSkeleton(utcTimeMillis, formatSpec, locale, formatterCache)
+        }
+
     override fun equals(other: Any?): Boolean {
         if (other !is DatePickerFormatterImpl) return false
-        if (yearSelectionSkeleton != other.yearSelectionSkeleton) return false
-        if (selectedDateSkeleton != other.selectedDateSkeleton) return false
-        if (selectedDateDescriptionSkeleton != other.selectedDateDescriptionSkeleton) return false
+        if (yearSelectionFormat != other.yearSelectionFormat) return false
+        if (selectedDateFormat != other.selectedDateFormat) return false
+        if (selectedDateDescriptionFormat != other.selectedDateDescriptionFormat) return false
+        if (usePattern != other.usePattern) return false
         return true
     }
 
     override fun hashCode(): Int {
-        var result = yearSelectionSkeleton.hashCode()
-        result = 31 * result + selectedDateSkeleton.hashCode()
-        result = 31 * result + selectedDateDescriptionSkeleton.hashCode()
+        var result = yearSelectionFormat.hashCode()
+        result = 31 * result + selectedDateFormat.hashCode()
+        result = 31 * result + selectedDateDescriptionFormat.hashCode()
+        result = 31 * result + usePattern.hashCode()
         return result
     }
 }

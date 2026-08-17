@@ -234,6 +234,36 @@ internal fun formatWithSkeleton(
 }
 
 /**
+ * Formats a UTC timestamp into a string with a given explicit date format **pattern** (as opposed
+ * to a skeleton — see [formatWithSkeleton]).
+ *
+ * Unlike a skeleton, a pattern's field order is used verbatim and is never locale-reordered, and
+ * no era (`G`) is added unless the pattern asks for one. This matters for calendars ICU has less
+ * complete per-locale skeleton data for (e.g. the Persian calendar, at the time of writing): for
+ * those, [DateFormat.getInstanceForSkeleton] can silently reorder fields and inject an era symbol
+ * that is not asked for, so an explicit pattern gives predictable, controlled output instead.
+ *
+ * @param utcTimeMillis a UTC timestamp to format (milliseconds from epoch)
+ * @param pattern a date format pattern (e.g. "d MMMM y")
+ * @param locale the [CalendarLocale] to use when formatting the given timestamp
+ * @param cache a [MutableMap] for caching formatter related results for better performance
+ */
+internal fun formatWithPattern(
+    utcTimeMillis: Long,
+    pattern: String,
+    locale: CalendarLocale,
+    cache: MutableMap<String, Any>,
+): String {
+    val formatter =
+        cache.getOrPut(key = "P:$pattern${locale.toLanguageTag()}") {
+            val sdf = android.icu.text.SimpleDateFormat(pattern, locale)
+            sdf.timeZone = TimeZone.GMT_ZONE
+            sdf
+        } as DateFormat
+    return formatter.format(Date(utcTimeMillis))
+}
+
+/**
  * A [CalendarModel] implementation backed by `java.time` (available since API 26, which is this
  * library's `minSdk`).
  *

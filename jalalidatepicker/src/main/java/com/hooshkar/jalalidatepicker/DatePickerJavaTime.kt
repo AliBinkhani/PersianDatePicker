@@ -24,6 +24,7 @@ fun rememberDatePickerState(
     initialSelectedDate: LocalDate?,
     initialDisplayedMonth: YearMonth? = initialSelectedDate?.let { YearMonth.from(it) },
     calendarType: CalendarType = CalendarType.PERSIAN,
+    locale: CalendarLocale = defaultLocale(),
     yearRange: IntRange =
         if (calendarType == CalendarType.PERSIAN) {
             DatePickerDefaults.PersianYearRange
@@ -37,6 +38,7 @@ fun rememberDatePickerState(
         initialSelectedDateMillis = initialSelectedDate?.let { getLocalDateMillisUtc(it) },
         initialDisplayedMonthMillis = initialDisplayedMonth?.let { getYearMonthMillisUtc(it) },
         calendarType = calendarType,
+        locale = locale,
         yearRange = yearRange,
         initialDisplayMode = initialDisplayMode,
         selectableDates = selectableDates,
