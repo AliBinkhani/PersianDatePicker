@@ -6,8 +6,15 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.hooshkar.jalalidatepicker.DatePicker
@@ -31,7 +38,21 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun JalaliDatePickerDemo(modifier: Modifier = Modifier) {
     val state = rememberDatePickerState()
-    DatePicker(state = state, modifier = modifier)
+    var dialogIsVisible by remember { mutableStateOf(true) }
+    DatePickerDialog(
+        onDismissRequest = {
+            dialogIsVisible = false
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                dialogIsVisible = false
+            }) {
+                Text("OK")
+            }
+        },
+    ) {
+        DatePicker(state = state, modifier = modifier)
+    }
 }
 
 @Preview(showBackground = true)

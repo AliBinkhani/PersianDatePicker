@@ -138,10 +138,10 @@ internal abstract class CalendarModel(val locale: CalendarLocale) {
 
     /**
      * Returns a [CalendarMonth] that is computed by adding a number of months, given as
-     * [addedMonthsCount], to a given month.
+     * [addedMonthsCount], to a given month. [addedMonthsCount] may be negative to go backwards.
      *
      * @param from the [CalendarMonth] to add to
-     * @param addedMonthsCount the number of months to add
+     * @param addedMonthsCount the number of months to add (or subtract, if negative)
      */
     abstract fun plusMonths(from: CalendarMonth, addedMonthsCount: Int): CalendarMonth
 
@@ -337,7 +337,7 @@ internal class CalendarModelImpl(locale: CalendarLocale) : CalendarModel(locale 
     }
 
     override fun plusMonths(from: CalendarMonth, addedMonthsCount: Int): CalendarMonth {
-        if (addedMonthsCount <= 0) return from
+        if (addedMonthsCount == 0) return from
 
         val firstDayLocalDate = from.toLocalDate()
         val laterMonth = firstDayLocalDate.plusMonths(addedMonthsCount.toLong())

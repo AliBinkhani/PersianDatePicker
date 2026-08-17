@@ -94,7 +94,7 @@ internal class PersianCalendarModelImpl(locale: CalendarLocale) : CalendarModel(
     }
 
     override fun plusMonths(from: CalendarMonth, addedMonthsCount: Int): CalendarMonth {
-        if (addedMonthsCount <= 0) return from
+        if (addedMonthsCount == 0) return from
         val cal = firstOfMonthCalendar(from.year, from.month)
         cal.add(IcuCalendar.MONTH, addedMonthsCount)
         return getMonth(cal.get(IcuCalendar.YEAR), cal.get(IcuCalendar.MONTH) + 1)

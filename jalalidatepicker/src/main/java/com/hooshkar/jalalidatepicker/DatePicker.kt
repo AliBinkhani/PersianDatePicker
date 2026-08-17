@@ -135,6 +135,10 @@ import kotlinx.coroutines.launch
  *   "‹ August ›") are shown
  * @param showYearNavigationArrows whether the previous/next arrows around the year field (e.g. "‹
  *   2025 ›") are shown
+ * @param showAdjacentMonthDays whether the leading/trailing grid cells show the (disabled,
+ *   non-interactive) day numbers from the previous/next month, matching the
+ *   [Material 3 date-picker spec](https://m3.material.io/components/date-pickers/specs), instead
+ *   of being left blank
  */
 @Composable
 fun DatePicker(
@@ -161,6 +165,7 @@ fun DatePicker(
     },
     showMonthNavigationArrows: Boolean = true,
     showYearNavigationArrows: Boolean = true,
+    showAdjacentMonthDays: Boolean = true,
 ) {
     val calendarModel =
         remember(state.locale, state.calendarType) {
@@ -192,6 +197,7 @@ fun DatePicker(
             colors = colors,
             showMonthNavigationArrows = showMonthNavigationArrows,
             showYearNavigationArrows = showYearNavigationArrows,
+            showAdjacentMonthDays = showAdjacentMonthDays,
         )
     }
 }
@@ -1199,6 +1205,7 @@ private fun DatePickerContent(
     colors: DatePickerColors,
     showMonthNavigationArrows: Boolean,
     showYearNavigationArrows: Boolean,
+    showAdjacentMonthDays: Boolean,
 ) {
     val displayedMonth = calendarModel.getMonth(displayedMonthMillis)
     val monthIndex = displayedMonth.indexIn(yearRange).coerceAtLeast(0)
@@ -1313,6 +1320,7 @@ private fun DatePickerContent(
                             dateFormatter = dateFormatter,
                             selectableDates = selectableDates,
                             colors = colors,
+                            showAdjacentMonthDays = showAdjacentMonthDays,
                         )
                     }
                 }
@@ -1420,6 +1428,7 @@ private fun HorizontalMonthsList(
     dateFormatter: DatePickerFormatter,
     selectableDates: SelectableDates,
     colors: DatePickerColors,
+    showAdjacentMonthDays: Boolean,
 ) {
     val today = calendarModel.today
     val firstMonth =
@@ -1443,9 +1452,19 @@ private fun HorizontalMonthsList(
         ) {
             items(numberOfMonthsInRange(yearRange)) {
                 val month = calendarModel.plusMonths(from = firstMonth, addedMonthsCount = it)
+                // Only look up the previous month's length when it's actually needed to number
+                // the leading adjacent-month cells.
+                val previousMonthNumberOfDays =
+                    if (showAdjacentMonthDays) {
+                        calendarModel.plusMonths(from = month, addedMonthsCount = -1).numberOfDays
+                    } else {
+                        0
+                    }
                 Box(modifier = Modifier.fillParentMaxWidth()) {
                     Month(
                         month = month,
+                        previousMonthNumberOfDays = previousMonthNumberOfDays,
+                        showAdjacentMonthDays = showAdjacentMonthDays,
                         onDateSelectionChange = onDateSelectionChange,
                         todayMillis = today.utcTimeMillis,
                         selectedDateMillis = selectedDateMillis,
@@ -1538,6 +1557,8 @@ internal fun WeekDays(colors: DatePickerColors, calendarModel: CalendarModel) {
 @Composable
 internal fun Month(
     month: CalendarMonth,
+    previousMonthNumberOfDays: Int,
+    showAdjacentMonthDays: Boolean,
     onDateSelectionChange: (dateInMillis: Long) -> Unit,
     todayMillis: Long,
     selectedDateMillis: Long?,
@@ -1546,6 +1567,12 @@ internal fun Month(
     colors: DatePickerColors,
     locale: CalendarLocale,
 ) {
+    // A month only ever needs a 6th row when its real days spill into it (rows 1-5 always
+    // contain at least one real day, since every month has at least 28 of them). When the 6th
+    // row isn't needed, it must stay entirely blank even with showAdjacentMonthDays on — filling
+    // it with next-month numbers would render what looks like a whole extra (7th) week that
+    // isn't part of this month at all.
+    val sixthRowHasRealDays = month.daysFromStartOfWeekToFirstOfMonth + month.numberOfDays > 5 * DaysInWeek
     var cellIndex = 0
     Column(
         modifier = Modifier.requiredHeight(RecommendedSizeForAccessibility * MaxCalendarRows),
@@ -1558,23 +1585,30 @@ internal fun Month(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 for (dayIndex in 0 until DaysInWeek) {
-                    if (
-                        cellIndex < month.daysFromStartOfWeekToFirstOfMonth ||
-                            cellIndex >=
-                                (month.daysFromStartOfWeekToFirstOfMonth + month.numberOfDays)
+                    if (cellIndex < month.daysFromStartOfWeekToFirstOfMonth) {
+                        // A day from the end of the previous month.
+                        if (showAdjacentMonthDays) {
+                            val dayNumber =
+                                previousMonthNumberOfDays -
+                                    (month.daysFromStartOfWeekToFirstOfMonth - cellIndex - 1)
+                            AdjacentMonthDay(text = dayNumber.toLocalString(locale = locale), colors = colors)
+                        } else {
+                            EmptyDayCell()
+                        }
+                    } else if (
+                        cellIndex >= (month.daysFromStartOfWeekToFirstOfMonth + month.numberOfDays)
                     ) {
-                        // Empty cell.
-                        Spacer(
-                            modifier =
-                                Modifier.sizeIn(
-                                        minWidth = DatePickerTokens.DateContainerWidth,
-                                        minHeight = DatePickerTokens.DateContainerHeight,
-                                    )
-                                    .size(
-                                        width = LocalMinimumInteractiveComponentSize.current,
-                                        height = LocalMinimumInteractiveComponentSize.current,
-                                    )
-                        )
+                        // A day from the start of the next month.
+                        val isWhollyForeignSixthRow = cellIndex >= 5 * DaysInWeek && !sixthRowHasRealDays
+                        if (showAdjacentMonthDays && !isWhollyForeignSixthRow) {
+                            val dayNumber =
+                                cellIndex -
+                                    (month.daysFromStartOfWeekToFirstOfMonth + month.numberOfDays) +
+                                    1
+                            AdjacentMonthDay(text = dayNumber.toLocalString(locale = locale), colors = colors)
+                        } else {
+                            EmptyDayCell()
+                        }
                     } else {
                         val dayNumber = cellIndex - month.daysFromStartOfWeekToFirstOfMonth
                         val dateInMillis =
@@ -1615,6 +1649,48 @@ internal fun Month(
                 }
             }
         }
+    }
+}
+
+/** A blank grid cell matching a [Day]'s footprint, used when [Month] hides adjacent-month days. */
+@Composable
+private fun EmptyDayCell() {
+    Spacer(
+        modifier =
+            Modifier.sizeIn(
+                    minWidth = DatePickerTokens.DateContainerWidth,
+                    minHeight = DatePickerTokens.DateContainerHeight,
+                )
+                .size(
+                    width = LocalMinimumInteractiveComponentSize.current,
+                    height = LocalMinimumInteractiveComponentSize.current,
+                )
+    )
+}
+
+/**
+ * A day number from the month before or after the one [Month] is currently rendering, filling out
+ * the leading/trailing grid cells the way the
+ * [Material 3 date-picker spec](https://m3.material.io/components/date-pickers/specs) does.
+ * Purely decorative: unlike [Day], it is not clickable and carries no semantics, since it can't be
+ * selected without first switching the displayed month.
+ */
+@Composable
+private fun AdjacentMonthDay(text: String, colors: DatePickerColors) {
+    Box(
+        modifier =
+            Modifier.sizeIn(
+                    minWidth = DatePickerTokens.DateContainerWidth,
+                    minHeight = DatePickerTokens.DateContainerHeight,
+                )
+                .size(
+                    width = LocalMinimumInteractiveComponentSize.current,
+                    height = LocalMinimumInteractiveComponentSize.current,
+                )
+                .clearAndSetSemantics {},
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text = text, color = colors.disabledDayContentColor, textAlign = TextAlign.Center)
     }
 }
 
