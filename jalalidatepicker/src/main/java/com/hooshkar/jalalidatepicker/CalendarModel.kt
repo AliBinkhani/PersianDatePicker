@@ -170,6 +170,20 @@ internal abstract class CalendarModel(val locale: CalendarLocale) {
         skeleton: String,
         locale: CalendarLocale = this.locale,
     ): String = formatWithSkeleton(date.utcTimeMillis, skeleton, locale, formatterCache)
+
+    /**
+     * Formats a [CalendarMonth] into a string with a given explicit date format pattern (see
+     * [formatWithPattern]).
+     *
+     * @param month a [CalendarMonth] to format
+     * @param pattern a date format pattern
+     * @param locale the [CalendarLocale] to use when formatting the given month
+     */
+    fun formatWithPattern(
+        month: CalendarMonth,
+        pattern: String,
+        locale: CalendarLocale = this.locale,
+    ): String = formatWithPattern(month.startUtcTimeMillis, pattern, locale, formatterCache)
 }
 
 /** Selects which calendar system a [CalendarModel] operates in. */

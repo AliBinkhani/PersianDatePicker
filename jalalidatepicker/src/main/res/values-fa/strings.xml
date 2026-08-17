@@ -11,4 +11,9 @@
     <string name="jdp_date_picker_switch_to_year_selection">رفتن به انتخاب سال</string>
     <string name="jdp_date_picker_switch_to_day_selection">برای انتخاب سال، تند بکشید یا برای برگشتن به انتخاب روز، تک‌ضرب بزنید</string>
     <string name="jdp_date_picker_navigate_to_year_description">پیمایش به سال %1$s</string>
+    <string name="jdp_date_picker_switch_to_month_selection">برای انتخاب ماه، تند بکشید یا برای برگشتن به انتخاب روز، تک‌ضرب بزنید</string>
+    <string name="jdp_date_picker_switch_to_previous_year">تغییر به سال قبلی</string>
+    <string name="jdp_date_picker_switch_to_next_year">تغییر به سال بعدی</string>
+    <string name="jdp_date_picker_navigate_to_month_description">پیمایش به %1$s</string>
+    <string name="jdp_date_picker_month_picker_pane_title">انتخاب‌گر ماه نمایان است</string>
 </resources>

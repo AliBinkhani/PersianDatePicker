@@ -53,6 +53,21 @@ internal value class Strings constructor(val value: Int) {
 
         val DatePickerNavigateToYearDescription
             get() = Strings(R.string.jdp_date_picker_navigate_to_year_description)
+
+        val DatePickerSwitchToMonthSelection
+            get() = Strings(R.string.jdp_date_picker_switch_to_month_selection)
+
+        val DatePickerSwitchToPreviousYear
+            get() = Strings(R.string.jdp_date_picker_switch_to_previous_year)
+
+        val DatePickerSwitchToNextYear
+            get() = Strings(R.string.jdp_date_picker_switch_to_next_year)
+
+        val DatePickerNavigateToMonthDescription
+            get() = Strings(R.string.jdp_date_picker_navigate_to_month_description)
+
+        val DatePickerMonthPickerPaneTitle
+            get() = Strings(R.string.jdp_date_picker_month_picker_pane_title)
     }
 }
 

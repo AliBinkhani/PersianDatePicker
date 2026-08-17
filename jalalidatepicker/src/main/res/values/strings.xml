@@ -11,4 +11,9 @@
     <string name="jdp_date_picker_switch_to_year_selection">Switch to selecting a year</string>
     <string name="jdp_date_picker_switch_to_day_selection">Swipe to select a year, or tap to switch back to selecting a day</string>
     <string name="jdp_date_picker_navigate_to_year_description">Navigate to year %1$s</string>
+    <string name="jdp_date_picker_switch_to_month_selection">Swipe to select a month, or tap to switch back to selecting a day</string>
+    <string name="jdp_date_picker_switch_to_previous_year">Change to previous year</string>
+    <string name="jdp_date_picker_switch_to_next_year">Change to next year</string>
+    <string name="jdp_date_picker_navigate_to_month_description">Navigate to %1$s</string>
+    <string name="jdp_date_picker_month_picker_pane_title">Month picker visible</string>
 </resources>

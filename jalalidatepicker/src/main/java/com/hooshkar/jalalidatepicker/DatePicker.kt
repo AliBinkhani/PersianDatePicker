@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredHeight
@@ -42,6 +43,7 @@ import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -106,6 +108,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
@@ -128,6 +131,10 @@ import kotlinx.coroutines.launch
  *   picker in different states. See [DatePickerDefaults.colors].
  * @param title the title to be displayed in the date picker
  * @param headline the headline to be displayed in the date picker
+ * @param showMonthNavigationArrows whether the previous/next arrows around the month field (e.g.
+ *   "‹ August ›") are shown
+ * @param showYearNavigationArrows whether the previous/next arrows around the year field (e.g. "‹
+ *   2025 ›") are shown
  */
 @Composable
 fun DatePicker(
@@ -152,6 +159,8 @@ fun DatePicker(
             contentColor = colors.headlineContentColor,
         )
     },
+    showMonthNavigationArrows: Boolean = true,
+    showYearNavigationArrows: Boolean = true,
 ) {
     val calendarModel =
         remember(state.locale, state.calendarType) {
@@ -181,6 +190,8 @@ fun DatePicker(
             dateFormatter = dateFormatter,
             selectableDates = state.selectableDates,
             colors = colors,
+            showMonthNavigationArrows = showMonthNavigationArrows,
+            showYearNavigationArrows = showYearNavigationArrows,
         )
     }
 }
@@ -1168,6 +1179,13 @@ internal fun DateEntryContainer(
     }
 }
 
+/** Which overlay (if any) is currently replacing the day grid in [DatePickerContent]. */
+private enum class DatePickerOverlay {
+    None,
+    Year,
+    Month,
+}
+
 @Composable
 private fun DatePickerContent(
     selectedDateMillis: Long?,
@@ -1179,9 +1197,12 @@ private fun DatePickerContent(
     dateFormatter: DatePickerFormatter,
     selectableDates: SelectableDates,
     colors: DatePickerColors,
+    showMonthNavigationArrows: Boolean,
+    showYearNavigationArrows: Boolean,
 ) {
     val displayedMonth = calendarModel.getMonth(displayedMonthMillis)
     val monthIndex = displayedMonth.indexIn(yearRange).coerceAtLeast(0)
+    val totalMonths = numberOfMonthsInRange(yearRange)
     val monthsListState = rememberLazyListState(initialFirstVisibleItemIndex = monthIndex)
 
     // Scroll to the resolved displayedMonth, if needed.
@@ -1195,19 +1216,20 @@ private fun DatePickerContent(
     }
 
     val coroutineScope = rememberCoroutineScope()
-    var yearPickerVisible by rememberSaveable { mutableStateOf(false) }
+    var overlay by rememberSaveable { mutableStateOf(DatePickerOverlay.None) }
     Column {
         MonthsNavigation(
             modifier = Modifier.padding(horizontal = DatePickerHorizontalPadding),
-            nextAvailable = monthsListState.canScrollForward,
-            previousAvailable = monthsListState.canScrollBackward,
-            yearPickerVisible = yearPickerVisible,
-            yearPickerText =
-                dateFormatter.formatMonthYear(
-                    monthMillis = displayedMonthMillis,
-                    locale = calendarModel.locale,
-                ) ?: "-",
-            onNextClicked = {
+            monthNextAvailable = monthsListState.canScrollForward,
+            monthPreviousAvailable = monthsListState.canScrollBackward,
+            yearNextAvailable = displayedMonth.year < yearRange.last,
+            yearPreviousAvailable = displayedMonth.year > yearRange.first,
+            overlay = overlay,
+            monthText = calendarModel.formatWithPattern(displayedMonth, "MMMM"),
+            yearText = displayedMonth.year.toLocalString(locale = calendarModel.locale),
+            showMonthNavigationArrows = showMonthNavigationArrows,
+            showYearNavigationArrows = showYearNavigationArrows,
+            onNextMonthClicked = {
                 coroutineScope.launch {
                     try {
                         monthsListState.animateScrollToItem(
@@ -1219,7 +1241,7 @@ private fun DatePickerContent(
                     }
                 }
             },
-            onPreviousClicked = {
+            onPreviousMonthClicked = {
                 coroutineScope.launch {
                     try {
                         monthsListState.animateScrollToItem(
@@ -1231,52 +1253,125 @@ private fun DatePickerContent(
                     }
                 }
             },
-            onYearPickerButtonClicked = { yearPickerVisible = !yearPickerVisible },
+            onNextYearClicked = {
+                coroutineScope.launch {
+                    try {
+                        monthsListState.animateScrollToItem(
+                            (monthsListState.firstVisibleItemIndex + 12).coerceAtMost(
+                                totalMonths - 1
+                            )
+                        )
+                    } catch (_: IllegalArgumentException) {
+                        // Ignore. This may happen if the user clicked the "next year" arrow fast
+                        // while the list was still animating.
+                    }
+                }
+            },
+            onPreviousYearClicked = {
+                coroutineScope.launch {
+                    try {
+                        monthsListState.animateScrollToItem(
+                            (monthsListState.firstVisibleItemIndex - 12).coerceAtLeast(0)
+                        )
+                    } catch (_: IllegalArgumentException) {
+                        // Ignore. This may happen if the user clicked the "previous year" arrow
+                        // fast while the list was still animating.
+                    }
+                }
+            },
+            onMonthPickerButtonClicked = {
+                overlay =
+                    if (overlay == DatePickerOverlay.Month) {
+                        DatePickerOverlay.None
+                    } else {
+                        DatePickerOverlay.Month
+                    }
+            },
+            onYearPickerButtonClicked = {
+                overlay =
+                    if (overlay == DatePickerOverlay.Year) {
+                        DatePickerOverlay.None
+                    } else {
+                        DatePickerOverlay.Year
+                    }
+            },
             colors = colors,
         )
 
         Box {
-            if (!yearPickerVisible) {
-                Column(modifier = Modifier.padding(horizontal = DatePickerHorizontalPadding)) {
-                    WeekDays(colors, calendarModel)
-                    HorizontalMonthsList(
-                        lazyListState = monthsListState,
-                        selectedDateMillis = selectedDateMillis,
-                        onDateSelectionChange = onDateSelectionChange,
-                        onDisplayedMonthChange = onDisplayedMonthChange,
-                        calendarModel = calendarModel,
-                        yearRange = yearRange,
-                        dateFormatter = dateFormatter,
-                        selectableDates = selectableDates,
-                        colors = colors,
-                    )
+            when (overlay) {
+                DatePickerOverlay.None -> {
+                    Column(modifier = Modifier.padding(horizontal = DatePickerHorizontalPadding)) {
+                        WeekDays(colors, calendarModel)
+                        HorizontalMonthsList(
+                            lazyListState = monthsListState,
+                            selectedDateMillis = selectedDateMillis,
+                            onDateSelectionChange = onDateSelectionChange,
+                            onDisplayedMonthChange = onDisplayedMonthChange,
+                            calendarModel = calendarModel,
+                            yearRange = yearRange,
+                            dateFormatter = dateFormatter,
+                            selectableDates = selectableDates,
+                            colors = colors,
+                        )
+                    }
                 }
-            } else {
-                val yearsPaneTitle = getString(Strings.DatePickerYearPickerPaneTitle)
-                Column(modifier = Modifier.semantics { paneTitle = yearsPaneTitle }) {
-                    YearPicker(
-                        modifier =
-                            Modifier.requiredHeight(
-                                    RecommendedSizeForAccessibility * (MaxCalendarRows + 1) -
-                                        DividerDefaults.Thickness
-                                )
-                                .padding(horizontal = DatePickerHorizontalPadding),
-                        displayedMonthMillis = displayedMonthMillis,
-                        onYearSelected = { year ->
-                            // Switch back to the monthly calendar and scroll to the selected year.
-                            yearPickerVisible = !yearPickerVisible
-                            coroutineScope.launch {
-                                monthsListState.scrollToItem(
-                                    (year - yearRange.first) * 12 + displayedMonth.month - 1
-                                )
-                            }
-                        },
-                        selectableDates = selectableDates,
-                        calendarModel = calendarModel,
-                        yearRange = yearRange,
-                        colors = colors,
-                    )
-                    HorizontalDivider(color = colors.dividerColor)
+                DatePickerOverlay.Year -> {
+                    val yearsPaneTitle = getString(Strings.DatePickerYearPickerPaneTitle)
+                    Column(modifier = Modifier.semantics { paneTitle = yearsPaneTitle }) {
+                        YearPicker(
+                            modifier =
+                                Modifier.requiredHeight(
+                                        RecommendedSizeForAccessibility * (MaxCalendarRows + 1) -
+                                            DividerDefaults.Thickness
+                                    )
+                                    .padding(horizontal = DatePickerHorizontalPadding),
+                            displayedMonthMillis = displayedMonthMillis,
+                            onYearSelected = { year ->
+                                // Switch back to the monthly calendar and scroll to the selected
+                                // year.
+                                overlay = DatePickerOverlay.None
+                                coroutineScope.launch {
+                                    monthsListState.scrollToItem(
+                                        (year - yearRange.first) * 12 + displayedMonth.month - 1
+                                    )
+                                }
+                            },
+                            selectableDates = selectableDates,
+                            calendarModel = calendarModel,
+                            yearRange = yearRange,
+                            colors = colors,
+                        )
+                        HorizontalDivider(color = colors.dividerColor)
+                    }
+                }
+                DatePickerOverlay.Month -> {
+                    val monthsPaneTitle = getString(Strings.DatePickerMonthPickerPaneTitle)
+                    Column(modifier = Modifier.semantics { paneTitle = monthsPaneTitle }) {
+                        MonthPicker(
+                            modifier =
+                                Modifier.requiredHeight(
+                                        RecommendedSizeForAccessibility * (MaxCalendarRows + 1) -
+                                            DividerDefaults.Thickness
+                                    )
+                                    .padding(horizontal = DatePickerHorizontalPadding),
+                            displayedMonthMillis = displayedMonthMillis,
+                            onMonthSelected = { month ->
+                                // Switch back to the monthly calendar and scroll to the selected
+                                // month.
+                                overlay = DatePickerOverlay.None
+                                coroutineScope.launch {
+                                    monthsListState.scrollToItem(
+                                        (displayedMonth.year - yearRange.first) * 12 + month - 1
+                                    )
+                                }
+                            },
+                            selectableDates = selectableDates,
+                            calendarModel = calendarModel,
+                            colors = colors,
+                        )
+                        HorizontalDivider(color = colors.dividerColor)
+                    }
                 }
             }
         }
@@ -1678,55 +1773,189 @@ private fun Year(
     }
 }
 
+/** A composable that lists the 12 months of [displayedMonthMillis]'s year for selection. */
+@Composable
+private fun MonthPicker(
+    modifier: Modifier,
+    displayedMonthMillis: Long,
+    onMonthSelected: (month: Int) -> Unit,
+    selectableDates: SelectableDates,
+    calendarModel: CalendarModel,
+    colors: DatePickerColors,
+) {
+    val displayedMonth = calendarModel.getMonth(displayedMonthMillis)
+    val lazyListState =
+        rememberLazyListState(initialFirstVisibleItemIndex = max(0, displayedMonth.month - 1 - 3))
+    // SelectableDates has no month-level granularity, so a month is only ever disabled through
+    // its year being disabled.
+    val yearEnabled = selectableDates.isSelectableYear(displayedMonth.year)
+    ProvideTextStyle(value = DatePickerTokens.SelectionYearLabelTextFont) {
+        LazyColumn(modifier = modifier.background(colors.containerColor), state = lazyListState) {
+            items(12) { index ->
+                val month = index + 1
+                val monthName =
+                    calendarModel.formatWithPattern(
+                        calendarModel.getMonth(displayedMonth.year, month),
+                        "MMMM",
+                    )
+                MonthRow(
+                    text = monthName,
+                    selected = month == displayedMonth.month,
+                    enabled = yearEnabled,
+                    onClick = { onMonthSelected(month) },
+                    description =
+                        formatDatePickerNavigateToMonthString(
+                            getString(Strings.DatePickerNavigateToMonthDescription),
+                            monthName,
+                        ),
+                    colors = colors,
+                )
+            }
+        }
+    }
+}
+
+private fun formatDatePickerNavigateToMonthString(template: String, monthName: String): String =
+    template.format(monthName)
+
+@Composable
+private fun MonthRow(
+    text: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    description: String,
+    colors: DatePickerColors,
+) {
+    // A primary-on-plain-background color, matching how "today"/"current year" are highlighted
+    // elsewhere in this picker without a filled container.
+    val contentColor =
+        when {
+            selected && enabled -> colors.currentYearContentColor
+            selected -> colors.disabledYearContentColor
+            enabled -> colors.yearContentColor
+            else -> colors.disabledYearContentColor
+        }
+    Surface(
+        selected = selected,
+        onClick = onClick,
+        enabled = enabled,
+        color = Color.Transparent,
+        modifier =
+            Modifier.fillMaxWidth().requiredHeight(RecommendedSizeForAccessibility).semantics(
+                mergeDescendants = true
+            ) {
+                this.text = AnnotatedString(description)
+                this.role = Role.Button
+            },
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize().padding(horizontal = DatePickerHorizontalPadding),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(modifier = Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+                if (selected) {
+                    Icon(imageVector = Icons.Filled.Check, contentDescription = null, tint = contentColor)
+                }
+            }
+            Spacer(Modifier.size(16.dp))
+            Text(text = text, modifier = Modifier.clearAndSetSemantics {}, color = contentColor)
+        }
+    }
+}
+
 /**
- * A composable that shows a year menu button and a couple of buttons that enable navigation
- * between displayed months.
+ * A composable that shows month and year menu buttons, each with their own previous/next
+ * navigation arrows.
  */
 @Composable
 private fun MonthsNavigation(
     modifier: Modifier,
-    nextAvailable: Boolean,
-    previousAvailable: Boolean,
-    yearPickerVisible: Boolean,
-    yearPickerText: String,
-    onNextClicked: () -> Unit,
-    onPreviousClicked: () -> Unit,
+    monthNextAvailable: Boolean,
+    monthPreviousAvailable: Boolean,
+    yearNextAvailable: Boolean,
+    yearPreviousAvailable: Boolean,
+    overlay: DatePickerOverlay,
+    monthText: String,
+    yearText: String,
+    showMonthNavigationArrows: Boolean,
+    showYearNavigationArrows: Boolean,
+    onNextMonthClicked: () -> Unit,
+    onPreviousMonthClicked: () -> Unit,
+    onNextYearClicked: () -> Unit,
+    onPreviousYearClicked: () -> Unit,
+    onMonthPickerButtonClicked: () -> Unit,
     onYearPickerButtonClicked: () -> Unit,
     colors: DatePickerColors,
 ) {
+    // Arrows only make sense while browsing the day grid; hide them while either overlay list is
+    // showing (matching how the single arrow pair used to hide behind the old year-only picker).
+    val arrowsVisible = overlay == DatePickerOverlay.None
     Row(
         modifier = modifier.fillMaxWidth().requiredHeight(MonthYearHeight),
-        horizontalArrangement = if (yearPickerVisible) Arrangement.Start else Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // A menu button for selecting a year.
-        YearPickerMenuButton(onClick = onYearPickerButtonClicked, expanded = yearPickerVisible) {
-            Text(
-                text = yearPickerText,
-                modifier =
-                    Modifier.semantics {
-                        liveRegion = LiveRegionMode.Polite
-                        contentDescription = yearPickerText
-                    },
-                color = colors.navigationContentColor,
-            )
-        }
-        // Show arrows for traversing months (only visible when the year selection is off)
-        if (!yearPickerVisible) {
-            CompositionLocalProvider(LocalContentColor provides colors.navigationContentColor) {
-                Row {
+        CompositionLocalProvider(LocalContentColor provides colors.navigationContentColor) {
+            // Month field: previous arrow, menu button, next arrow. Weighted (unlike the year
+            // field below) so it claims all space left over after the year field's natural
+            // width — month names need much more of the row than a handful of year digits do.
+            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                if (arrowsVisible && showMonthNavigationArrows) {
                     IconButtonWithTooltip(
-                        onClick = onPreviousClicked,
-                        enabled = previousAvailable,
+                        onClick = onPreviousMonthClicked,
+                        enabled = monthPreviousAvailable,
                         icon = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                         contentDescription = getString(Strings.DatePickerSwitchToPreviousMonth),
                     )
-
+                }
+                DateFieldMenuButton(
+                    text = monthText,
+                    onClick = onMonthPickerButtonClicked,
+                    expanded = overlay == DatePickerOverlay.Month,
+                    expandDescription = getString(Strings.DatePickerSwitchToMonthSelection),
+                    collapseDescription = getString(Strings.DatePickerSwitchToDaySelection),
+                    // The dropdown chevron is redundant (and costs width month names need) once
+                    // the arrows already mark this field as interactive.
+                    showChevron = !showMonthNavigationArrows,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (arrowsVisible && showMonthNavigationArrows) {
                     IconButtonWithTooltip(
-                        onClick = onNextClicked,
-                        enabled = nextAvailable,
+                        onClick = onNextMonthClicked,
+                        enabled = monthNextAvailable,
                         icon = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                         contentDescription = getString(Strings.DatePickerSwitchToNextMonth),
+                    )
+                }
+            }
+            // Year field: previous arrow, menu button, next arrow. Sized to its own natural
+            // (unweighted) width — year digits are always short, so this leaves the month field
+            // as much room as possible.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (arrowsVisible && showYearNavigationArrows) {
+                    IconButtonWithTooltip(
+                        onClick = onPreviousYearClicked,
+                        enabled = yearPreviousAvailable,
+                        icon = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                        contentDescription = getString(Strings.DatePickerSwitchToPreviousYear),
+                    )
+                }
+                DateFieldMenuButton(
+                    text = yearText,
+                    onClick = onYearPickerButtonClicked,
+                    expanded = overlay == DatePickerOverlay.Year,
+                    expandDescription = getString(Strings.DatePickerSwitchToYearSelection),
+                    collapseDescription = getString(Strings.DatePickerSwitchToDaySelection),
+                    showChevron = !showYearNavigationArrows,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (arrowsVisible && showYearNavigationArrows) {
+                    IconButtonWithTooltip(
+                        onClick = onNextYearClicked,
+                        enabled = yearNextAvailable,
+                        icon = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = getString(Strings.DatePickerSwitchToNextYear),
                     )
                 }
             }
@@ -1734,12 +1963,26 @@ private fun MonthsNavigation(
     }
 }
 
+/**
+ * A text (+ optional dropdown-chevron) button used for both the month and year fields in
+ * [MonthsNavigation]. [text] is single-line and ellipsized rather than wrapped, since this button
+ * shares its row with up to 3 siblings (its own pair of arrows, plus the other field's button and
+ * arrows) in a [DatePickerTokens.ContainerWidth]-constrained row.
+ *
+ * @param showChevron whether to show the dropdown-chevron icon. When the field's own left/right
+ *   arrows are already visible (see [MonthsNavigation]'s `showMonthNavigationArrows` /
+ *   `showYearNavigationArrows`), the chevron is redundant and callers pass `false` here to give
+ *   [text] — month names in particular — that width back instead.
+ */
 @Composable
-private fun YearPickerMenuButton(
+private fun DateFieldMenuButton(
+    text: String,
     onClick: () -> Unit,
     expanded: Boolean,
+    expandDescription: String,
+    collapseDescription: String,
+    showChevron: Boolean,
     modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
 ) {
     TextButton(
         onClick = onClick,
@@ -1749,17 +1992,30 @@ private fun YearPickerMenuButton(
         elevation = null,
         border = null,
     ) {
-        content()
-        Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-        Icon(
-            Icons.Filled.ArrowDropDown,
-            contentDescription =
-                if (expanded) {
-                    getString(Strings.DatePickerSwitchToDaySelection)
-                } else {
-                    getString(Strings.DatePickerSwitchToYearSelection)
+        Text(
+            text = text,
+            modifier =
+                Modifier.weight(1f, fill = false).semantics {
+                    liveRegion = LiveRegionMode.Polite
+                    // When there's no chevron to carry the expand/collapse hint on its own, fold
+                    // it into this field's accessible name instead of dropping it entirely.
+                    contentDescription =
+                        if (showChevron) {
+                            text
+                        } else {
+                            "$text, ${if (expanded) collapseDescription else expandDescription}"
+                        }
                 },
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
+        if (showChevron) {
+            Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+            Icon(
+                Icons.Filled.ArrowDropDown,
+                contentDescription = if (expanded) collapseDescription else expandDescription,
+            )
+        }
     }
 }
 
