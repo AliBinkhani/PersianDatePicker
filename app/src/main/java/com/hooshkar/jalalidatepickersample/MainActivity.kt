@@ -5,8 +5,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -18,6 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.hooshkar.jalalidatepicker.DatePicker
+import com.hooshkar.jalalidatepicker.DatePickerDialog
 import com.hooshkar.jalalidatepicker.rememberDatePickerState
 import com.hooshkar.jalalidatepickersample.ui.theme.JalaliDatePickerTheme
 
@@ -27,31 +26,31 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             JalaliDatePickerTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    JalaliDatePickerDemo(modifier = Modifier.padding(innerPadding))
-                }
+                Scaffold(modifier = Modifier.fillMaxSize()) { JalaliDatePickerDemo() }
             }
         }
     }
 }
 
 @Composable
-fun JalaliDatePickerDemo(modifier: Modifier = Modifier) {
+fun JalaliDatePickerDemo() {
     val state = rememberDatePickerState()
     var dialogIsVisible by remember { mutableStateOf(true) }
-    DatePickerDialog(
-        onDismissRequest = {
-            dialogIsVisible = false
-        },
-        confirmButton = {
-            TextButton(onClick = {
+    if (dialogIsVisible) {
+        DatePickerDialog(
+            onDismissRequest = {
                 dialogIsVisible = false
-            }) {
-                Text("OK")
-            }
-        },
-    ) {
-        DatePicker(state = state, modifier = modifier)
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    dialogIsVisible = false
+                }) {
+                    Text("OK")
+                }
+            },
+        ) {
+            DatePicker(state = state)
+        }
     }
 }
 
