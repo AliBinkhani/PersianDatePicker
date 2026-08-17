@@ -143,17 +143,18 @@ fun DatePicker(
         DatePickerDefaults.DatePickerHeadline(
             selectedDateMillis = state.selectedDateMillis,
             dateFormatter = dateFormatter,
+            locale = state.locale,
             modifier = Modifier.padding(DatePickerHeadlinePadding),
             contentColor = colors.headlineContentColor,
         )
     },
 ) {
     val calendarModel =
-        remember(state.locale) {
+        remember(state.locale, state.calendarType) {
             if (state is BaseDatePickerStateImpl) {
                 state.calendarModel
             } else {
-                createCalendarModel(state.locale)
+                createCalendarModel(state.locale, state.calendarType)
             }
         }
     DateEntryContainer(
@@ -207,6 +208,9 @@ interface DatePickerState {
 
     /** A [DisplayMode] that represents the current UI mode (i.e. picker or input). */
     var displayMode: DisplayMode
+
+    /** The [CalendarType] (Gregorian or Persian/Jalali) this picker's dates are expressed in. */
+    val calendarType: CalendarType
 
     /** An [IntRange] that holds the year range that the date picker will be limited to. */
     val yearRange: IntRange
@@ -295,6 +299,8 @@ value class DisplayMode internal constructor(internal val value: Int) {
  *   an `initialSelectedDateMillis` is provided, the initial displayed month would be the month of
  *   the selected date. Otherwise, in case `null` is provided, the displayed month would be the
  *   current one.
+ * @param calendarType the [CalendarType] (Gregorian or Persian/Jalali) this picker's dates are
+ *   expressed in
  * @param yearRange an [IntRange] that holds the year range that the date picker will be limited
  *   to
  * @param initialDisplayMode an initial [DisplayMode] that this state will hold
@@ -305,18 +311,25 @@ value class DisplayMode internal constructor(internal val value: Int) {
 fun rememberDatePickerState(
     initialSelectedDateMillis: Long? = null,
     initialDisplayedMonthMillis: Long? = initialSelectedDateMillis,
-    yearRange: IntRange = DatePickerDefaults.YearRange,
+    calendarType: CalendarType = CalendarType.PERSIAN,
+    yearRange: IntRange =
+        if (calendarType == CalendarType.PERSIAN) {
+            DatePickerDefaults.PersianYearRange
+        } else {
+            DatePickerDefaults.YearRange
+        },
     initialDisplayMode: DisplayMode = DisplayMode.Picker,
     selectableDates: SelectableDates = DatePickerDefaults.AllDates,
 ): DatePickerState {
     val locale = defaultLocale()
-    return rememberSaveable(saver = DatePickerStateImpl.Saver(selectableDates, locale)) {
+    return rememberSaveable(saver = DatePickerStateImpl.Saver(selectableDates, locale, calendarType)) {
             DatePickerStateImpl(
                 initialSelectedDateMillis = initialSelectedDateMillis,
                 initialDisplayedMonthMillis = initialDisplayedMonthMillis,
                 yearRange = yearRange,
                 initialDisplayMode = initialDisplayMode,
                 selectableDates = selectableDates,
+                calendarType = calendarType,
                 locale = locale,
             )
         }
@@ -340,6 +353,8 @@ fun rememberDatePickerState(
  * @param initialDisplayedMonthMillis timestamp in _UTC_ milliseconds from the epoch that
  *   represents an initial selection of a month to be displayed to the user. In case `null` is
  *   provided, the displayed month would be the current one.
+ * @param calendarType the [CalendarType] (Gregorian or Persian/Jalali) this picker's dates are
+ *   expressed in
  * @param yearRange an [IntRange] that holds the year range that the date picker will be limited
  *   to
  * @param initialDisplayMode an initial [DisplayMode] that this state will hold
@@ -353,7 +368,13 @@ fun DatePickerState(
     locale: CalendarLocale,
     initialSelectedDateMillis: Long? = null,
     initialDisplayedMonthMillis: Long? = initialSelectedDateMillis,
-    yearRange: IntRange = DatePickerDefaults.YearRange,
+    calendarType: CalendarType = CalendarType.PERSIAN,
+    yearRange: IntRange =
+        if (calendarType == CalendarType.PERSIAN) {
+            DatePickerDefaults.PersianYearRange
+        } else {
+            DatePickerDefaults.YearRange
+        },
     initialDisplayMode: DisplayMode = DisplayMode.Picker,
     selectableDates: SelectableDates = DatePickerDefaults.AllDates,
 ): DatePickerState =
@@ -363,6 +384,7 @@ fun DatePickerState(
         yearRange = yearRange,
         initialDisplayMode = initialDisplayMode,
         selectableDates = selectableDates,
+        calendarType = calendarType,
         locale = locale,
     )
 
@@ -502,6 +524,10 @@ object DatePickerDefaults {
      * @param dateFormatter a [DatePickerFormatter]
      * @param modifier a [Modifier] to be applied for the headline
      * @param contentColor the content color of this headline
+     * @param locale the [CalendarLocale] to format [selectedDateMillis] with. Defaults to the
+     *   platform locale, but callers that know their picker's actual calendar-aware locale (e.g.
+     *   [DatePicker] itself, via `state.locale`) should pass it explicitly so the headline text
+     *   uses the same calendar system (Gregorian/Persian) as the calendar grid.
      */
     @Composable
     fun DatePickerHeadline(
@@ -509,8 +535,8 @@ object DatePickerDefaults {
         dateFormatter: DatePickerFormatter,
         modifier: Modifier = Modifier,
         contentColor: Color = colors().headlineContentColor,
+        locale: CalendarLocale = defaultLocale(),
     ) {
-        val locale = defaultLocale()
         val formattedDate =
             dateFormatter.formatDate(dateMillis = selectedDateMillis, locale = locale)
         val verboseDateDescription =
@@ -567,8 +593,11 @@ object DatePickerDefaults {
         }
     }
 
-    /** The range of years for the date picker dialogs. */
+    /** The range of Gregorian years for the date picker dialogs. */
     val YearRange: IntRange = IntRange(1900, 2100)
+
+    /** The range of Persian (Jalali) years for the date picker dialogs. */
+    val PersianYearRange: IntRange = IntRange(1300, 1500)
 
     /** The default tonal elevation used for the date picker dialog. */
     val TonalElevation: Dp = 0.dp
@@ -828,8 +857,12 @@ private val Color.isSpecified: Boolean
  *   to
  * @param selectableDates a [SelectableDates] that is consulted to check if a date is allowed. In
  *   case a date is not allowed to be selected, it will appear disabled in the UI.
- * @param locale a locale that will be used when formatting dates, determining the input format,
- *   week-days, and more.
+ * @param calendarType the [CalendarType] (Gregorian or Persian/Jalali) this state's dates are
+ *   expressed in
+ * @param requestedLocale a locale that will be used when formatting dates, determining the input
+ *   format, week-days, and more. The effective [locale] exposed by this state is derived from
+ *   this one, with an explicit `ca` (calendar) Unicode extension applied to match
+ *   [calendarType] — see [createCalendarModel].
  * @throws [IllegalArgumentException] if the initial selected date or displayed month represent a
  *   year that is out of the year range.
  * @see rememberDatePickerState
@@ -839,10 +872,15 @@ internal abstract class BaseDatePickerStateImpl(
     initialDisplayedMonthMillis: Long?,
     val yearRange: IntRange,
     selectableDates: SelectableDates,
-    val locale: CalendarLocale,
+    val calendarType: CalendarType,
+    requestedLocale: CalendarLocale,
 ) {
 
-    val calendarModel = createCalendarModel(locale)
+    val calendarModel = createCalendarModel(requestedLocale, calendarType)
+
+    /** The effective, calendar-aware locale (carries the `ca` extension matching [calendarType]). */
+    val locale: CalendarLocale
+        get() = calendarModel.locale
 
     var selectableDates by mutableStateOf(selectableDates)
 
@@ -885,9 +923,10 @@ private class DatePickerStateImpl(
     yearRange: IntRange,
     initialDisplayMode: DisplayMode,
     selectableDates: SelectableDates,
+    calendarType: CalendarType,
     locale: CalendarLocale,
 ) :
-    BaseDatePickerStateImpl(initialDisplayedMonthMillis, yearRange, selectableDates, locale),
+    BaseDatePickerStateImpl(initialDisplayedMonthMillis, yearRange, selectableDates, calendarType, locale),
     DatePickerState {
 
     /** A mutable state of [CalendarDate] that represents a selected date. */
@@ -938,7 +977,11 @@ private class DatePickerStateImpl(
          * @param selectableDates a [SelectableDates] instance that is consulted to check if a
          *   date is allowed
          */
-        fun Saver(selectableDates: SelectableDates, locale: CalendarLocale): Saver<DatePickerStateImpl, Any> =
+        fun Saver(
+            selectableDates: SelectableDates,
+            locale: CalendarLocale,
+            calendarType: CalendarType,
+        ): Saver<DatePickerStateImpl, Any> =
             listSaver(
                 save = {
                     listOf(
@@ -956,6 +999,7 @@ private class DatePickerStateImpl(
                         yearRange = IntRange(value[2] as Int, value[3] as Int),
                         initialDisplayMode = DisplayMode(value[4] as Int),
                         selectableDates = selectableDates,
+                        calendarType = calendarType,
                         locale = locale,
                     )
                 },

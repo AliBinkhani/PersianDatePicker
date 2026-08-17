@@ -172,8 +172,34 @@ internal abstract class CalendarModel(val locale: CalendarLocale) {
     ): String = formatWithSkeleton(date.utcTimeMillis, skeleton, locale, formatterCache)
 }
 
-/** Returns a [CalendarModel] to be used by the date picker. */
-internal fun createCalendarModel(locale: CalendarLocale): CalendarModel = CalendarModelImpl(locale)
+/** Selects which calendar system a [CalendarModel] operates in. */
+enum class CalendarType {
+    /** The standard Gregorian calendar. */
+    GREGORIAN,
+
+    /** The Persian (Jalali / Solar Hijri) calendar. */
+    PERSIAN,
+}
+
+/**
+ * Returns a [CalendarModel] to be used by the date picker.
+ *
+ * The returned model's [CalendarModel.locale] always carries an explicit `ca` (calendar) Unicode
+ * locale extension matching [calendarType]. This is not just for [CalendarType.PERSIAN]: some
+ * regions (e.g. `IR`) have a non-Gregorian calendar as their CLDR default, so
+ * [CalendarType.GREGORIAN] needs the explicit `gregory` override too, or ICU-backed formatting
+ * (see [formatWithSkeleton]) would silently render Persian month names/digits under a "Gregorian"
+ * picker.
+ */
+internal fun createCalendarModel(locale: CalendarLocale, calendarType: CalendarType): CalendarModel {
+    val calendarKeyword = if (calendarType == CalendarType.PERSIAN) "persian" else "gregory"
+    val effectiveLocale: CalendarLocale =
+        java.util.Locale.Builder().setLocale(locale).setUnicodeLocaleKeyword("ca", calendarKeyword).build()
+    return when (calendarType) {
+        CalendarType.GREGORIAN -> CalendarModelImpl(effectiveLocale)
+        CalendarType.PERSIAN -> PersianCalendarModelImpl(effectiveLocale)
+    }
+}
 
 /**
  * Formats a UTC timestamp into a string with a given date format skeleton.

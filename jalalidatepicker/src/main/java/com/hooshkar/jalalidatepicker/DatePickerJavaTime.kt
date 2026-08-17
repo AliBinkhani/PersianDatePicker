@@ -23,13 +23,20 @@ import java.time.ZoneOffset
 fun rememberDatePickerState(
     initialSelectedDate: LocalDate?,
     initialDisplayedMonth: YearMonth? = initialSelectedDate?.let { YearMonth.from(it) },
-    yearRange: IntRange = DatePickerDefaults.YearRange,
+    calendarType: CalendarType = CalendarType.PERSIAN,
+    yearRange: IntRange =
+        if (calendarType == CalendarType.PERSIAN) {
+            DatePickerDefaults.PersianYearRange
+        } else {
+            DatePickerDefaults.YearRange
+        },
     initialDisplayMode: DisplayMode = DisplayMode.Picker,
     selectableDates: SelectableDates = DatePickerDefaults.AllDates,
 ): DatePickerState =
     rememberDatePickerState(
         initialSelectedDateMillis = initialSelectedDate?.let { getLocalDateMillisUtc(it) },
         initialDisplayedMonthMillis = initialDisplayedMonth?.let { getYearMonthMillisUtc(it) },
+        calendarType = calendarType,
         yearRange = yearRange,
         initialDisplayMode = initialDisplayMode,
         selectableDates = selectableDates,
