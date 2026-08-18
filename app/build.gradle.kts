@@ -4,13 +4,13 @@ plugins {
 }
 
 android {
-    namespace = "com.hooshkar.jalalidatepickersample"
+    namespace = "com.hooshkar.persiandatepickersample"
     compileSdk {
         version = release(37)
     }
 
     defaultConfig {
-        applicationId = "com.hooshkar.jalalidatepickersample"
+        applicationId = "com.hooshkar.persianatepickersample"
         minSdk = 26
         targetSdk = 37
         versionCode = 1
@@ -36,7 +36,7 @@ android {
 }
 
 dependencies {
-    implementation(project(":jalalidatepicker"))
+    implementation(project(":persiandatepicker"))
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
