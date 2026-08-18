@@ -155,7 +155,7 @@ fun DatePicker(
     },
     headline: (@Composable () -> Unit)? = {
         DatePickerDefaults.DatePickerHeadline(
-            selectedDateMillis = state.selectedDateMillis,
+            selectedDateMillis = state.selectedDate?.toEpochMillis(),
             dateFormatter = dateFormatter,
             locale = state.locale,
             calendarType = state.calendarType,
@@ -175,6 +175,16 @@ fun DatePicker(
                 createCalendarModel(state.locale, state.calendarType)
             }
         }
+    // This picker's internal grid/scroll machinery is millis-based (see DatePickerContent); the
+    // public DatePickerState works in CalendarDate/CalendarYearMonth instead (see [CalendarDate]'s
+    // KDoc for why), so bridge between the two here, at the single point where they meet.
+    val selectedDateMillis =
+        state.selectedDate?.let { date ->
+            calendarModel.getMonth(date.year, date.month).startUtcTimeMillis +
+                (date.dayOfMonth - 1) * MillisecondsIn24Hours
+        }
+    val displayedMonthMillis =
+        calendarModel.getMonth(state.displayedMonth.year, state.displayedMonth.month).startUtcTimeMillis
     DateEntryContainer(
         modifier = modifier,
         title = title,
@@ -184,11 +194,16 @@ fun DatePicker(
         colors = colors,
     ) {
         DatePickerContent(
-            selectedDateMillis = state.selectedDateMillis,
-            displayedMonthMillis = state.displayedMonthMillis,
-            onDateSelectionChange = { dateInMillis -> state.selectedDateMillis = dateInMillis },
+            selectedDateMillis = selectedDateMillis,
+            displayedMonthMillis = displayedMonthMillis,
+            onDateSelectionChange = { dateInMillis ->
+                val resolved = calendarModel.getCanonicalDate(dateInMillis)
+                state.selectedDate =
+                    CalendarDate(resolved.year, resolved.month, resolved.dayOfMonth, state.calendarType)
+            },
             onDisplayedMonthChange = { monthInMillis ->
-                state.displayedMonthMillis = monthInMillis
+                val month = calendarModel.getMonth(monthInMillis)
+                state.displayedMonth = CalendarYearMonth(month.year, month.month)
             },
             calendarModel = calendarModel,
             yearRange = state.yearRange,
@@ -210,22 +225,26 @@ fun DatePicker(
 interface DatePickerState {
 
     /**
-     * A timestamp that represents the selected date _start_ of the day in _UTC_ milliseconds from
-     * the epoch.
+     * The selected date, expressed in this state's [calendarType], or `null` if there is no
+     * selection. Setting a date whose year falls outside [yearRange] clears the selection instead
+     * of throwing.
      *
-     * @throws IllegalArgumentException in case the value is set with a timestamp that does not
-     *   fall within the [yearRange].
+     * Setting a [CalendarDate] whose [CalendarDate.calendarType] differs from this state's
+     * [calendarType] auto-converts it (see [CalendarDate.toPersian]/[CalendarDate.toGregorian]) —
+     * there is never a need to convert by hand. The getter always returns a date whose
+     * [CalendarDate.calendarType] matches this state's [calendarType].
+     *
+     * To convert to/from a UTC-millisecond instant, `java.util.Date`, or `java.time.LocalDate`,
+     * see [CalendarDate.fromEpochMillis]/[CalendarDate.toEpochMillis] and friends in
+     * DatePickerInterop.kt.
      */
-    var selectedDateMillis: Long?
+    var selectedDate: CalendarDate?
 
     /**
-     * A timestamp that represents the currently displayed month _start_ date in _UTC_
-     * milliseconds from the epoch.
-     *
-     * @throws IllegalArgumentException in case the value is set with a timestamp that does not
-     *   fall within the [yearRange].
+     * The currently displayed month, expressed in this state's [calendarType]. Setting a month
+     * whose year falls outside [yearRange] is a no-op.
      */
-    var displayedMonthMillis: Long
+    var displayedMonth: CalendarYearMonth
 
     /** A [DisplayMode] that represents the current UI mode (i.e. picker or input). */
     var displayMode: DisplayMode
@@ -313,13 +332,14 @@ value class DisplayMode internal constructor(internal val value: Int) {
  *
  * To create a date picker state outside composition, see the `DatePickerState` function.
  *
- * @param initialSelectedDateMillis timestamp in _UTC_ milliseconds from the epoch that represents
- *   an initial selection of a date. Provide a `null` to indicate no selection.
- * @param initialDisplayedMonthMillis timestamp in _UTC_ milliseconds from the epoch that
- *   represents an initial selection of a month to be displayed to the user. By default, in case
- *   an `initialSelectedDateMillis` is provided, the initial displayed month would be the month of
- *   the selected date. Otherwise, in case `null` is provided, the displayed month would be the
- *   current one.
+ * @param initialSelectedDate an initial selection of a date, expressed in [calendarType]. Provide
+ *   `null` to indicate no selection. If you only have a UTC-millisecond instant,
+ *   `java.util.Date`, or `java.time.LocalDate`, see [CalendarDate.fromEpochMillis] and friends in
+ *   DatePickerInterop.kt to convert it first.
+ * @param initialDisplayedMonth an initial month to be displayed to the user, expressed in
+ *   [calendarType]. By default, in case an `initialSelectedDate` is provided, the initial
+ *   displayed month would be the month of the selected date. Otherwise, in case `null` is
+ *   provided, the displayed month would be the current one.
  * @param calendarType the [CalendarType] (Gregorian or Persian/Jalali) this picker's dates are
  *   expressed in
  * @param locale the [CalendarLocale] that will be used when formatting dates, determining the
@@ -335,9 +355,10 @@ value class DisplayMode internal constructor(internal val value: Int) {
  */
 @Composable
 fun rememberDatePickerState(
-    initialSelectedDateMillis: Long? = null,
-    initialDisplayedMonthMillis: Long? = initialSelectedDateMillis,
     calendarType: CalendarType = CalendarType.PERSIAN,
+    initialSelectedDate: CalendarDate? = null,
+    initialDisplayedMonth: CalendarYearMonth? =
+        initialSelectedDate?.inCalendarType(calendarType)?.let { CalendarYearMonth(it.year, it.month) },
     locale: CalendarLocale = defaultLocale(),
     yearRange: IntRange =
         if (calendarType == CalendarType.PERSIAN) {
@@ -350,8 +371,8 @@ fun rememberDatePickerState(
 ): DatePickerState {
     return rememberSaveable(saver = DatePickerStateImpl.Saver(selectableDates, locale, calendarType)) {
             DatePickerStateImpl(
-                initialSelectedDateMillis = initialSelectedDateMillis,
-                initialDisplayedMonthMillis = initialDisplayedMonthMillis,
+                initialSelectedDate = initialSelectedDate,
+                initialDisplayedMonth = initialDisplayedMonth,
                 yearRange = yearRange,
                 initialDisplayMode = initialDisplayMode,
                 selectableDates = selectableDates,
@@ -372,13 +393,10 @@ fun rememberDatePickerState(
  *
  * @param locale the [CalendarLocale] that will be used when formatting dates, determining the
  *   input format, displaying the week-day, determining the first day of the week, and more.
- * @param initialSelectedDateMillis timestamp in _UTC_ milliseconds from the epoch that represents
- *   an initial selection of a date. Provide a `null` to indicate no selection. Note that the
- *   state's [DatePickerState.selectedDateMillis] will provide a timestamp that represents the
- *   _start_ of the day, which may be different than the provided initialSelectedDateMillis.
- * @param initialDisplayedMonthMillis timestamp in _UTC_ milliseconds from the epoch that
- *   represents an initial selection of a month to be displayed to the user. In case `null` is
- *   provided, the displayed month would be the current one.
+ * @param initialSelectedDate an initial selection of a date, expressed in [calendarType]. Provide
+ *   `null` to indicate no selection.
+ * @param initialDisplayedMonth an initial month to be displayed to the user, expressed in
+ *   [calendarType]. In case `null` is provided, the displayed month would be the current one.
  * @param calendarType the [CalendarType] (Gregorian or Persian/Jalali) this picker's dates are
  *   expressed in
  * @param yearRange an [IntRange] that holds the year range that the date picker will be limited
@@ -392,9 +410,10 @@ fun rememberDatePickerState(
  */
 fun DatePickerState(
     locale: CalendarLocale,
-    initialSelectedDateMillis: Long? = null,
-    initialDisplayedMonthMillis: Long? = initialSelectedDateMillis,
     calendarType: CalendarType = CalendarType.PERSIAN,
+    initialSelectedDate: CalendarDate? = null,
+    initialDisplayedMonth: CalendarYearMonth? =
+        initialSelectedDate?.inCalendarType(calendarType)?.let { CalendarYearMonth(it.year, it.month) },
     yearRange: IntRange =
         if (calendarType == CalendarType.PERSIAN) {
             DatePickerDefaults.PersianYearRange
@@ -405,8 +424,8 @@ fun DatePickerState(
     selectableDates: SelectableDates = DatePickerDefaults.AllDates,
 ): DatePickerState =
     DatePickerStateImpl(
-        initialSelectedDateMillis = initialSelectedDateMillis,
-        initialDisplayedMonthMillis = initialDisplayedMonthMillis,
+        initialSelectedDate = initialSelectedDate,
+        initialDisplayedMonth = initialDisplayedMonth,
         yearRange = yearRange,
         initialDisplayMode = initialDisplayMode,
         selectableDates = selectableDates,
@@ -918,9 +937,8 @@ private val Color.isSpecified: Boolean
 /**
  * An abstract for the date pickers states.
  *
- * @param initialDisplayedMonthMillis timestamp in _UTC_ milliseconds from the epoch that
- *   represents an initial selection of a month to be displayed to the user. In case `null` is
- *   provided, the displayed month would be the current one.
+ * @param initialDisplayedMonth an initial month to be displayed to the user, expressed in
+ *   [calendarType]. In case `null` is provided, the displayed month would be the current one.
  * @param yearRange an [IntRange] that holds the year range that the date picker will be limited
  *   to
  * @param selectableDates a [SelectableDates] that is consulted to check if a date is allowed. In
@@ -937,7 +955,7 @@ private val Color.isSpecified: Boolean
  */
 @Stable
 internal abstract class BaseDatePickerStateImpl(
-    initialDisplayedMonthMillis: Long?,
+    initialDisplayedMonth: CalendarYearMonth?,
     val yearRange: IntRange,
     selectableDates: SelectableDates,
     val calendarType: CalendarType,
@@ -954,27 +972,21 @@ internal abstract class BaseDatePickerStateImpl(
 
     private val _displayedMonth =
         mutableStateOf(
-            if (initialDisplayedMonthMillis != null) {
-                var month = calendarModel.getMonth(initialDisplayedMonthMillis)
-                if (!yearRange.contains(month.year)) {
-                    // The initial display month's year is out of the years range, so just set the
-                    // displayed month to the current one.
-                    month = calendarModel.getMonth(calendarModel.today)
-                }
-                month
+            if (initialDisplayedMonth != null && yearRange.contains(initialDisplayedMonth.year)) {
+                calendarModel.getMonth(initialDisplayedMonth.year, initialDisplayedMonth.month)
             } else {
-                // Set the displayed month to the current one.
+                // No (valid) initial month was provided, or its year was out of the years range;
+                // set the displayed month to the current one.
                 calendarModel.getMonth(calendarModel.today)
             }
         )
 
-    var displayedMonthMillis: Long
-        get() = _displayedMonth.value.startUtcTimeMillis
-        set(monthMillis) {
-            val month = calendarModel.getMonth(monthMillis)
-            // Set the displayed month only if the month's year is within the years range.
-            if (yearRange.contains(month.year)) {
-                _displayedMonth.value = month
+    var displayedMonth: CalendarYearMonth
+        get() = _displayedMonth.value.let { CalendarYearMonth(it.year, it.month) }
+        set(value) {
+            // Set the displayed month only if its year is within the years range.
+            if (yearRange.contains(value.year)) {
+                _displayedMonth.value = calendarModel.getMonth(value.year, value.month)
             }
         }
 }
@@ -986,42 +998,44 @@ internal abstract class BaseDatePickerStateImpl(
  */
 @Stable
 private class DatePickerStateImpl(
-    initialSelectedDateMillis: Long?,
-    initialDisplayedMonthMillis: Long?,
+    initialSelectedDate: CalendarDate?,
+    initialDisplayedMonth: CalendarYearMonth?,
     yearRange: IntRange,
     initialDisplayMode: DisplayMode,
     selectableDates: SelectableDates,
     calendarType: CalendarType,
     locale: CalendarLocale,
 ) :
-    BaseDatePickerStateImpl(initialDisplayedMonthMillis, yearRange, selectableDates, calendarType, locale),
+    BaseDatePickerStateImpl(initialDisplayedMonth, yearRange, selectableDates, calendarType, locale),
     DatePickerState {
 
-    /** A mutable state of [CalendarDate] that represents a selected date. */
+    /** A mutable state of [ResolvedDate] that represents a selected date. */
     private var _selectedDate =
-        mutableStateOf(
-            if (initialSelectedDateMillis != null) {
-                val date = calendarModel.getCanonicalDate(initialSelectedDateMillis)
-                // If the provided initial date's year is out of the years range, return null.
-                // Otherwise, return the date.
-                if (yearRange.contains(date.year)) date else null
-            } else {
-                null
-            }
-        )
+        mutableStateOf(initialSelectedDate?.inCalendarType(calendarType)?.let(::resolveIfInRange))
 
-    override var selectedDateMillis: Long?
-        get() = _selectedDate.value?.utcTimeMillis
-        set(dateMillis) {
-            if (dateMillis != null) {
-                val date = calendarModel.getCanonicalDate(dateMillis)
-                // Validate that the give date is within the valid years range. In not, set the
-                // selected date to null.
-                _selectedDate.value = if (yearRange.contains(date.year)) date else null
-            } else {
-                _selectedDate.value = null
-            }
+    override var selectedDate: CalendarDate?
+        get() = _selectedDate.value?.let { CalendarDate(it.year, it.month, it.dayOfMonth, calendarType) }
+        set(value) {
+            // Auto-convert a date given in a different calendar system to this state's own, then
+            // validate that its year is within the valid years range. If not, clear the selection
+            // instead.
+            _selectedDate.value = value?.inCalendarType(calendarType)?.let(::resolveIfInRange)
         }
+
+    /**
+     * Resolves [date] (year/month/day already in this state's [calendarType]) to its
+     * [ResolvedDate], or `null` if [date]'s year falls outside [yearRange].
+     */
+    private fun resolveIfInRange(date: CalendarDate): ResolvedDate? =
+        if (yearRange.contains(date.year)) resolve(date) else null
+
+    /** Resolves [date] (year/month/day in this state's [calendarType]) to its [ResolvedDate]. */
+    private fun resolve(date: CalendarDate): ResolvedDate {
+        val monthStartMillis = calendarModel.getMonth(date.year, date.month).startUtcTimeMillis
+        return calendarModel.getCanonicalDate(
+            monthStartMillis + (date.dayOfMonth - 1) * MillisecondsIn24Hours
+        )
+    }
 
     /**
      * A mutable state of [DisplayMode] that represents the current display mode of the UI (i.e.
@@ -1032,9 +1046,7 @@ private class DatePickerStateImpl(
     override var displayMode
         get() = _displayMode.value
         set(displayMode) {
-            selectedDateMillis?.let {
-                displayedMonthMillis = calendarModel.getMonth(it).startUtcTimeMillis
-            }
+            selectedDate?.let { displayedMonth = CalendarYearMonth(it.year, it.month) }
             _displayMode.value = displayMode
         }
 
@@ -1052,20 +1064,32 @@ private class DatePickerStateImpl(
         ): Saver<DatePickerStateImpl, Any> =
             listSaver(
                 save = {
+                    val selected = it.selectedDate
+                    val displayed = it.displayedMonth
                     listOf(
-                        it.selectedDateMillis,
-                        it.displayedMonthMillis,
+                        selected?.year,
+                        selected?.month,
+                        selected?.dayOfMonth,
+                        displayed.year,
+                        displayed.month,
                         it.yearRange.first,
                         it.yearRange.last,
                         it.displayMode.value,
                     )
                 },
                 restore = { value ->
+                    val selectedYear = value[0] as Int?
+                    val initialSelectedDate =
+                        if (selectedYear != null) {
+                            CalendarDate(selectedYear, value[1] as Int, value[2] as Int, calendarType)
+                        } else {
+                            null
+                        }
                     DatePickerStateImpl(
-                        initialSelectedDateMillis = value[0] as Long?,
-                        initialDisplayedMonthMillis = value[1] as Long?,
-                        yearRange = IntRange(value[2] as Int, value[3] as Int),
-                        initialDisplayMode = DisplayMode(value[4] as Int),
+                        initialSelectedDate = initialSelectedDate,
+                        initialDisplayedMonth = CalendarYearMonth(value[3] as Int, value[4] as Int),
+                        yearRange = IntRange(value[5] as Int, value[6] as Int),
+                        initialDisplayMode = DisplayMode(value[7] as Int),
                         selectableDates = selectableDates,
                         calendarType = calendarType,
                         locale = locale,

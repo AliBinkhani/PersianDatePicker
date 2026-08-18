@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CalendarLocale
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -15,9 +16,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import com.hooshkar.jalalidatepicker.CalendarDate
+import com.hooshkar.jalalidatepicker.CalendarType
+import com.hooshkar.jalalidatepicker.CalendarYearMonth
 import com.hooshkar.jalalidatepicker.DatePicker
 import com.hooshkar.jalalidatepicker.DatePickerDialog
+import com.hooshkar.jalalidatepicker.fromEpochMillis
 import com.hooshkar.jalalidatepicker.rememberDatePickerState
+import com.hooshkar.jalalidatepicker.toLocalDate
+import com.hooshkar.jalalidatepicker.toPersian
 import com.hooshkar.jalalidatepickersample.ui.theme.JalaliDatePickerTheme
 
 class MainActivity : ComponentActivity() {
@@ -34,7 +41,11 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun JalaliDatePickerDemo() {
-    val state = rememberDatePickerState()
+    val state = rememberDatePickerState(
+        initialSelectedDate = CalendarDate(2026, 8, 17, CalendarType.GREGORIAN),
+        //initialDisplayedMonth = CalendarYearMonth()
+    )
+
     var dialogIsVisible by remember { mutableStateOf(true) }
     if (dialogIsVisible) {
         DatePickerDialog(

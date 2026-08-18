@@ -30,7 +30,9 @@ internal const val DaysInWeek: Int = 7
 internal const val MillisecondsIn24Hours: Long = 86400000L
 
 /**
- * Represents a calendar date.
+ * An internal, calendar-model-resolved date: like the public [CalendarDate], but additionally
+ * carries the [utcTimeMillis] this model resolved it to (needed for the millis-based grid/scroll
+ * math the rest of this picker's implementation is built around).
  *
  * @param year the date's year
  * @param month the date's month
@@ -38,13 +40,13 @@ internal const val MillisecondsIn24Hours: Long = 86400000L
  * @param utcTimeMillis the date representation in _UTC_ milliseconds from the epoch
  */
 @Immutable
-internal data class CalendarDate(
+internal data class ResolvedDate(
     val year: Int,
     val month: Int,
     val dayOfMonth: Int,
     val utcTimeMillis: Long,
-) : Comparable<CalendarDate> {
-    override operator fun compareTo(other: CalendarDate): Int =
+) : Comparable<ResolvedDate> {
+    override operator fun compareTo(other: ResolvedDate): Int =
         this.utcTimeMillis.compareTo(other.utcTimeMillis)
 }
 
@@ -84,8 +86,8 @@ internal abstract class CalendarModel(val locale: CalendarLocale) {
     // A map for caching formatter related results for better performance.
     internal val formatterCache = mutableMapOf<String, Any>()
 
-    /** A [CalendarDate] representing the current day. */
-    abstract val today: CalendarDate
+    /** A [ResolvedDate] representing the current day. */
+    abstract val today: ResolvedDate
 
     /**
      * Hold the first day of the week at the current `Locale` as an integer. The integer value
@@ -102,14 +104,14 @@ internal abstract class CalendarModel(val locale: CalendarLocale) {
     abstract val weekdayNames: List<Pair<String, String>>
 
     /**
-     * Returns a [CalendarDate] from a given _UTC_ time in milliseconds.
+     * Returns a [ResolvedDate] from a given _UTC_ time in milliseconds.
      *
      * The returned date will hold milliseconds value that represent the start of the day, which
      * may be different than the one provided to this function.
      *
      * @param timeInMillis UTC milliseconds from the epoch
      */
-    abstract fun getCanonicalDate(timeInMillis: Long): CalendarDate
+    abstract fun getCanonicalDate(timeInMillis: Long): ResolvedDate
 
     /**
      * Returns a [CalendarMonth] from a given _UTC_ time in milliseconds.
@@ -119,14 +121,14 @@ internal abstract class CalendarModel(val locale: CalendarLocale) {
     abstract fun getMonth(timeInMillis: Long): CalendarMonth
 
     /**
-     * Returns a [CalendarMonth] from a given [CalendarDate].
+     * Returns a [CalendarMonth] from a given [ResolvedDate].
      *
-     * Note: This function ignores the [CalendarDate.dayOfMonth] value and just uses the date's
+     * Note: This function ignores the [ResolvedDate.dayOfMonth] value and just uses the date's
      * year and month to resolve a [CalendarMonth].
      *
-     * @param date a [CalendarDate] to resolve into a month
+     * @param date a [ResolvedDate] to resolve into a month
      */
-    abstract fun getMonth(date: CalendarDate): CalendarMonth
+    abstract fun getMonth(date: ResolvedDate): CalendarMonth
 
     /**
      * Returns a [CalendarMonth] from a given [year] and [month].
@@ -159,14 +161,14 @@ internal abstract class CalendarModel(val locale: CalendarLocale) {
     ): String = formatWithSkeleton(month.startUtcTimeMillis, skeleton, locale, formatterCache)
 
     /**
-     * Formats a [CalendarDate] into a string with a given date format skeleton.
+     * Formats a [ResolvedDate] into a string with a given date format skeleton.
      *
-     * @param date a [CalendarDate] to format
+     * @param date a [ResolvedDate] to format
      * @param skeleton a date format skeleton
      * @param locale the [CalendarLocale] to use when formatting the given date
      */
     fun formatWithSkeleton(
-        date: CalendarDate,
+        date: ResolvedDate,
         skeleton: String,
         locale: CalendarLocale = this.locale,
     ): String = formatWithSkeleton(date.utcTimeMillis, skeleton, locale, formatterCache)
@@ -286,9 +288,9 @@ internal fun formatWithPattern(
 internal class CalendarModelImpl(locale: CalendarLocale) : CalendarModel(locale = locale) {
 
     override val today
-        get(): CalendarDate {
+        get(): ResolvedDate {
             val systemLocalDate = LocalDate.now()
-            return CalendarDate(
+            return ResolvedDate(
                 year = systemLocalDate.year,
                 month = systemLocalDate.monthValue,
                 dayOfMonth = systemLocalDate.dayOfMonth,
@@ -312,9 +314,9 @@ internal class CalendarModelImpl(locale: CalendarLocale) : CalendarModel(locale 
             }
         }
 
-    override fun getCanonicalDate(timeInMillis: Long): CalendarDate {
+    override fun getCanonicalDate(timeInMillis: Long): ResolvedDate {
         val localDate = Instant.ofEpochMilli(timeInMillis).atZone(utcTimeZoneId).toLocalDate()
-        return CalendarDate(
+        return ResolvedDate(
             year = localDate.year,
             month = localDate.monthValue,
             dayOfMonth = localDate.dayOfMonth,
@@ -328,7 +330,7 @@ internal class CalendarModelImpl(locale: CalendarLocale) : CalendarModel(locale 
         )
     }
 
-    override fun getMonth(date: CalendarDate): CalendarMonth {
+    override fun getMonth(date: ResolvedDate): CalendarMonth {
         return getMonth(LocalDate.of(date.year, date.month, 1))
     }
 

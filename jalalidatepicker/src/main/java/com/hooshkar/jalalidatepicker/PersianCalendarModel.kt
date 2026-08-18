@@ -39,13 +39,13 @@ internal class PersianCalendarModelImpl(locale: CalendarLocale) : CalendarModel(
 
     private fun newCalendar(): IcuCalendar = IcuCalendar.getInstance(IcuTimeZone.GMT_ZONE, locale)
 
-    override val today: CalendarDate
+    override val today: ResolvedDate
         get() {
             val cal = newCalendar()
             val year = cal.get(IcuCalendar.YEAR)
             val month = cal.get(IcuCalendar.MONTH) + 1
             val dayOfMonth = cal.get(IcuCalendar.DAY_OF_MONTH)
-            return CalendarDate(year, month, dayOfMonth, startOfDayMillis(year, month, dayOfMonth))
+            return ResolvedDate(year, month, dayOfMonth, startOfDayMillis(year, month, dayOfMonth))
         }
 
     override val firstDayOfWeek: Int = WeekFields.of(weekLocale).firstDayOfWeek.value
@@ -60,13 +60,13 @@ internal class PersianCalendarModelImpl(locale: CalendarLocale) : CalendarModel(
             }
         }
 
-    override fun getCanonicalDate(timeInMillis: Long): CalendarDate {
+    override fun getCanonicalDate(timeInMillis: Long): ResolvedDate {
         val cal = newCalendar()
         cal.timeInMillis = timeInMillis
         val year = cal.get(IcuCalendar.YEAR)
         val month = cal.get(IcuCalendar.MONTH) + 1
         val dayOfMonth = cal.get(IcuCalendar.DAY_OF_MONTH)
-        return CalendarDate(year, month, dayOfMonth, startOfDayMillis(year, month, dayOfMonth))
+        return ResolvedDate(year, month, dayOfMonth, startOfDayMillis(year, month, dayOfMonth))
     }
 
     override fun getMonth(timeInMillis: Long): CalendarMonth {
@@ -75,7 +75,7 @@ internal class PersianCalendarModelImpl(locale: CalendarLocale) : CalendarModel(
         return getMonth(cal.get(IcuCalendar.YEAR), cal.get(IcuCalendar.MONTH) + 1)
     }
 
-    override fun getMonth(date: CalendarDate): CalendarMonth = getMonth(date.year, date.month)
+    override fun getMonth(date: ResolvedDate): CalendarMonth = getMonth(date.year, date.month)
 
     override fun getMonth(year: Int, month: Int): CalendarMonth {
         val cal = firstOfMonthCalendar(year, month)
