@@ -10,7 +10,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.hooshkar.persianatepickersample"
+        applicationId = "com.hooshkar.persiandatepickersample"
         minSdk = 26
         targetSdk = 37
         versionCode = 1
