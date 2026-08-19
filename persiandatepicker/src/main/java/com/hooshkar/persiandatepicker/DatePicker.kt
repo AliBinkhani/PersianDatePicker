@@ -929,11 +929,6 @@ class DatePickerColors(
     }
 }
 
-private fun Color.takeOrElse(block: () -> Color): Color = if (isSpecified) this else block()
-
-private val Color.isSpecified: Boolean
-    get() = this != Color.Unspecified
-
 /**
  * An abstract for the date pickers states.
  *
@@ -1078,7 +1073,7 @@ private class DatePickerStateImpl(
                     )
                 },
                 restore = { value ->
-                    val selectedYear = value[0] as Int?
+                    val selectedYear = value[0]
                     val initialSelectedDate =
                         if (selectedYear != null) {
                             CalendarDate(selectedYear, value[1] as Int, value[2] as Int, calendarType)
@@ -1353,10 +1348,8 @@ private fun DatePickerContent(
                     Column(modifier = Modifier.semantics { paneTitle = yearsPaneTitle }) {
                         YearPicker(
                             modifier =
-                                Modifier.requiredHeight(
-                                        RecommendedSizeForAccessibility * (MaxCalendarRows + 1) -
-                                            DividerDefaults.Thickness
-                                    )
+                                Modifier
+                                    .requiredHeight(RecommendedSizeForAccessibility * (MaxCalendarRows + 1) - DividerDefaults.Thickness)
                                     .padding(horizontal = DatePickerHorizontalPadding),
                             displayedMonthMillis = displayedMonthMillis,
                             onYearSelected = { year ->
@@ -1382,10 +1375,7 @@ private fun DatePickerContent(
                     Column(modifier = Modifier.semantics { paneTitle = monthsPaneTitle }) {
                         MonthPicker(
                             modifier =
-                                Modifier.requiredHeight(
-                                        RecommendedSizeForAccessibility * (MaxCalendarRows + 1) -
-                                            DividerDefaults.Thickness
-                                    )
+                                Modifier.requiredHeight(RecommendedSizeForAccessibility * (MaxCalendarRows + 1) - DividerDefaults.Thickness)
                                     .padding(horizontal = DatePickerHorizontalPadding),
                             displayedMonthMillis = displayedMonthMillis,
                             onMonthSelected = { month ->
@@ -1427,7 +1417,8 @@ internal fun DatePickerHeader(
             Modifier
         }
     Column(
-        modifier.fillMaxWidth().then(heightModifier),
+        modifier.fillMaxWidth()
+            .then(heightModifier),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
         if (title != null) {
@@ -1547,7 +1538,8 @@ internal fun WeekDays(colors: DatePickerColors, calendarModel: CalendarModel) {
 
     Row(
         modifier =
-            Modifier.defaultMinSize(minHeight = RecommendedSizeForAccessibility).fillMaxWidth(),
+            Modifier.defaultMinSize(minHeight = RecommendedSizeForAccessibility)
+                .fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -1602,13 +1594,13 @@ internal fun Month(
         modifier = Modifier.requiredHeight(RecommendedSizeForAccessibility * MaxCalendarRows),
         verticalArrangement = Arrangement.SpaceEvenly,
     ) {
-        for (weekIndex in 0 until MaxCalendarRows) {
+        repeat(MaxCalendarRows) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                for (dayIndex in 0 until DaysInWeek) {
+                repeat(DaysInWeek) {
                     if (cellIndex < month.daysFromStartOfWeekToFirstOfMonth) {
                         // A day from the end of the previous month.
                         if (showAdjacentMonthDays) {
@@ -1942,15 +1934,18 @@ private fun MonthRow(
         enabled = enabled,
         color = Color.Transparent,
         modifier =
-            Modifier.fillMaxWidth().requiredHeight(RecommendedSizeForAccessibility).semantics(
-                mergeDescendants = true
-            ) {
-                this.text = AnnotatedString(description)
-                this.role = Role.Button
-            },
+            Modifier.fillMaxWidth()
+                .requiredHeight(RecommendedSizeForAccessibility)
+                .semantics(
+                    mergeDescendants = true
+                ) {
+                    this.text = AnnotatedString(description)
+                    this.role = Role.Button
+                },
     ) {
         Row(
-            modifier = Modifier.fillMaxSize().padding(horizontal = DatePickerHorizontalPadding),
+            modifier = Modifier.fillMaxSize()
+                .padding(horizontal = DatePickerHorizontalPadding),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(modifier = Modifier.size(24.dp), contentAlignment = Alignment.Center) {
@@ -1992,7 +1987,8 @@ private fun MonthsNavigation(
     // showing (matching how the single arrow pair used to hide behind the old year-only picker).
     val arrowsVisible = overlay == DatePickerOverlay.None
     Row(
-        modifier = modifier.fillMaxWidth().requiredHeight(MonthYearHeight),
+        modifier = modifier.fillMaxWidth()
+            .requiredHeight(MonthYearHeight),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -2095,17 +2091,18 @@ private fun DateFieldMenuButton(
         Text(
             text = text,
             modifier =
-                Modifier.weight(1f, fill = false).semantics {
-                    liveRegion = LiveRegionMode.Polite
-                    // When there's no chevron to carry the expand/collapse hint on its own, fold
-                    // it into this field's accessible name instead of dropping it entirely.
-                    contentDescription =
-                        if (showChevron) {
-                            text
-                        } else {
-                            "$text, ${if (expanded) collapseDescription else expandDescription}"
-                        }
-                },
+                Modifier.weight(1f, fill = false)
+                    .semantics {
+                        liveRegion = LiveRegionMode.Polite
+                        // When there's no chevron to carry the expand/collapse hint on its own, fold
+                        // it into this field's accessible name instead of dropping it entirely.
+                        contentDescription =
+                            if (showChevron) {
+                                text
+                            } else {
+                                "$text, ${if (expanded) collapseDescription else expandDescription}"
+                            }
+                    },
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )

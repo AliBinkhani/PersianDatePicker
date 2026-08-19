@@ -19,8 +19,6 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
-import java.time.format.DecimalStyle
 import java.time.format.TextStyle
 import java.time.temporal.WeekFields
 import java.util.Date
@@ -68,8 +66,6 @@ internal data class CalendarMonth(
     val daysFromStartOfWeekToFirstOfMonth: Int,
     val startUtcTimeMillis: Long,
 ) {
-    val endUtcTimeMillis: Long = startUtcTimeMillis + (numberOfDays * MillisecondsIn24Hours) - 1
-
     /** Returns the position of a [CalendarMonth] within given years range. */
     fun indexIn(years: IntRange): Int {
         return (year - years.first) * 12 + month - 1
@@ -146,32 +142,6 @@ internal abstract class CalendarModel(val locale: CalendarLocale) {
      * @param addedMonthsCount the number of months to add (or subtract, if negative)
      */
     abstract fun plusMonths(from: CalendarMonth, addedMonthsCount: Int): CalendarMonth
-
-    /**
-     * Formats a [CalendarMonth] into a string with a given date format skeleton.
-     *
-     * @param month a [CalendarMonth] to format
-     * @param skeleton a date format skeleton
-     * @param locale the [CalendarLocale] to use when formatting the given month
-     */
-    fun formatWithSkeleton(
-        month: CalendarMonth,
-        skeleton: String,
-        locale: CalendarLocale = this.locale,
-    ): String = formatWithSkeleton(month.startUtcTimeMillis, skeleton, locale, formatterCache)
-
-    /**
-     * Formats a [ResolvedDate] into a string with a given date format skeleton.
-     *
-     * @param date a [ResolvedDate] to format
-     * @param skeleton a date format skeleton
-     * @param locale the [CalendarLocale] to use when formatting the given date
-     */
-    fun formatWithSkeleton(
-        date: ResolvedDate,
-        skeleton: String,
-        locale: CalendarLocale = this.locale,
-    ): String = formatWithSkeleton(date.utcTimeMillis, skeleton, locale, formatterCache)
 
     /**
      * Formats a [CalendarMonth] into a string with a given explicit date format pattern (see
@@ -353,17 +323,6 @@ internal class CalendarModelImpl(locale: CalendarLocale) : CalendarModel(locale 
     companion object {
         /** Holds a UTC [ZoneId]. */
         internal val utcTimeZoneId: ZoneId = ZoneId.of("UTC")
-
-        internal fun getCachedDateTimeFormatter(
-            pattern: String,
-            locale: CalendarLocale,
-            cache: MutableMap<String, Any>,
-        ): DateTimeFormatter {
-            return cache.getOrPut(key = "P:$pattern${locale.toLanguageTag()}") {
-                DateTimeFormatter.ofPattern(pattern, locale)
-                    .withDecimalStyle(DecimalStyle.of(locale))
-            } as DateTimeFormatter
-        }
     }
 
     private fun getMonth(firstDayLocalDate: LocalDate): CalendarMonth {

@@ -11,15 +11,12 @@ package com.hooshkar.persiandatepicker
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReadOnlyComposable
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
-import androidx.core.os.ConfigurationCompat
-import java.util.Locale
 import kotlin.jvm.JvmInline
+import androidx.compose.ui.platform.LocalResources
 
 @Immutable
 @JvmInline
-internal value class Strings constructor(val value: Int) {
+internal value class Strings(val value: Int) {
     companion object {
         val DatePickerTitle
             get() = Strings(R.string.jdp_date_picker_title)
@@ -74,16 +71,6 @@ internal value class Strings constructor(val value: Int) {
 @Composable
 @ReadOnlyComposable
 internal fun getString(string: Strings): String {
-    LocalConfiguration.current
-    val resources = LocalContext.current.resources
+    val resources = LocalResources.current
     return resources.getString(string.value)
-}
-
-@Composable
-@ReadOnlyComposable
-internal fun getString(string: Strings, vararg formatArgs: Any): String {
-    val raw = getString(string)
-    val locale =
-        ConfigurationCompat.getLocales(LocalConfiguration.current).get(0) ?: Locale.getDefault()
-    return String.format(locale, raw, *formatArgs)
 }
