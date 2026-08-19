@@ -32,9 +32,6 @@ afterEvaluate {
         publications {
             register<MavenPublication>("release") {
                 from(components["release"])
-                groupId = "com.github.AliBinkhani.PersianDatePicker"
-                artifactId = "persiandatepicker"
-                version = "1.0.0"
             }
         }
     }

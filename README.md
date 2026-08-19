@@ -106,7 +106,7 @@ dependencyResolutionManagement {
 
 ```kotlin
 dependencies {
-    implementation("com.github.AliBinkhani.PersianDatePicker:persiandatepicker:<version>")
+    implementation("com.github.AliBinkhani:PersianDatePicker:<version>")
 }
 ```
 
@@ -115,7 +115,7 @@ dependencies {
 
 ```groovy
 dependencies {
-    implementation 'com.github.AliBinkhani.PersianDatePicker:persiandatepicker:<version>'
+    implementation 'com.github.AliBinkhani:PersianDatePicker:<version>'
 }
 ```
 
