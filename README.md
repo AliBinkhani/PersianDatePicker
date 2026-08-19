@@ -4,6 +4,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![minSdk](https://img.shields.io/badge/minSdk-26-brightgreen.svg)](https://developer.android.com/studio/releases/platforms)
 [![Compose Material 3](https://img.shields.io/badge/Jetpack%20Compose-Material%203-7F52FF.svg)](https://m3.material.io/components/date-pickers/overview)
+[![فارسی](https://img.shields.io/badge/README-فارسی-red.svg)](README.fa.md)
 
 A Jetpack Compose **Material 3** date picker for Android with first-class support for the
 **Persian (Jalali / Solar Hijri) calendar**, alongside the standard **Gregorian** calendar — in
